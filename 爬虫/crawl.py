@@ -7,12 +7,18 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 from elasticsearch import Elasticsearch
 from pygraph.classes.digraph import digraph
+from readability import Document 
 try:
     from pr_iterator import PRIterator
 except ImportError:
     print("Error: 'pr_iterator' module not found. Ensure it is installed or available in the project directory.")
     PRIterator = None  # Placeholder to avoid further errors
-
+def clean_content(text):
+    """移除HTML注释、多余空格和不可见字符"""
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)  # 删除HTML注释
+    text = re.sub(r"\s+", " ", text)                         # 合并连续空白字符
+    text = text.strip()                                      # 去除首尾空格
+    return text
 
 def get_html(url):
     # 参数    url: 要解析的网址
@@ -30,52 +36,36 @@ def get_html(url):
 
 
 def get_expand_urls(bs, url):
-    # 参数    bs: 网址url对应的bs4解析包 url: 目标网址
-    # 功能    获得当前网页html中包含的所有链接，这里做了很多条件判断，主要是链接的过滤和拼接工作
-    # 返回值   urls: 当前网页html中包含的所有链接
-    # results = re.findall(r'<a href="([\s\S]*?)"', html)  # 原本的方法，也行的通
+    """严格过滤并生成待爬取链接"""
     urls_expand = []
-    for item in bs.find_all("a"):  # 当前网页html的所有a标签
-        href = item.get("href")  # 找到链接
-        if href is None:
-            continue
-        href = str(href)
-        index = href.find("#")  # 去除#跳转
-        if index != -1:
-            href = href[:index]
-        if href.find("javascript") != -1 or href.find("download") != -1:  # 跳过包含指定字符串的网址
-            continue
-        if len(href) < 1 or href == '/':  # 如果href长度小于1或者等于'/'，则跳过
-            continue
-        if href.find("http") == -1:  # 对于相对地址，加上前缀
-            # 将所有href处理成'/'开头
-            if href[0] != '/':
-                href = '/' + href
-            else:
-                if href[0] == '.' and href[1] == '/':
-                    href = href[1:]
-            if url[-1] == '/':  # 去除url尾部的'/'（如果有）
-                url = url[:-1]
-            href = url + href
-        else:  # 对于绝对地址，直接添加
-            index_of_end_of_domain = href.find('/', href.find("//") + 2)
-            index_of_nankai_str = href.find("nankai")
-            if index_of_nankai_str == -1 or index_of_nankai_str > index_of_end_of_domain:  # 跳过不包含"nankai"的网址
-                continue
-        if href.find("less.nankai.edu.cn/public") != -1 or href.find("weekly.nankai.edu.cn/oldrelease.php") != -1:  # 跳过大量重复网址
+    domain_pattern = re.compile(r"^https?://([a-z0-9-]+\.)*nankai\.edu\.cn")  # 严格匹配南开大学域名
+    
+    for item in bs.find_all("a"):
+        href = item.get("href")
+        if not href:
             continue
 
-        index_suffix = href.rfind(".")  # 下载类型后缀（如果有）
-        if href[index_suffix + 1:] in download_suffix_list:  # 如果是下载地址，则存到es的document索引  # 不想访问下载链接，太费时，所以这里稍微草率处理
-            print("download href found: " + href)
-            json_data_document = {"url": href, "text": item.get_text()}
-            res = es.index(index="test_document", document=json_data_document)  # 建立索引
-            print(res['result'])
+        # 处理相对路径
+        if not href.startswith(("http://", "https://")):
+            if href.startswith("/"):
+                href = f"{url.rstrip('/')}{href}"
+            else:
+                href = f"{url}/{href}"
+
+        # 标准化URL
+        href = re.sub(r"#.*$", "", href)  # 移除锚点
+        href = href.split("?")[0]         # 移除查询参数
+
+        # 过滤条件
+        if (
+            not domain_pattern.match(href)                # 非南开大学域名
+            or href.lower().endswith(tuple(download_suffix_list))  # 下载链接
+            or re.search(r"(javascript|download|#)", href)        # 无效协议
+        ):
             continue
 
         urls_expand.append(href)
-    return urls_expand
-
+    return list(set(urls_expand))  # 去重
 
 def print_json_data(json_data):
     # 参数    json_data: 要打印的数据
@@ -97,31 +87,35 @@ def print_json_data(json_data):
 
 # 获得html的内容
 def content_handler(bs, url, index):
-    # 参数    bs: 当前网页的bs解析包 url: 当前网页网址 index: 当前网页的序号（用于保存文件）
-    # 功能    获得并保存当前网页的标题和内容
-    # 返回值   bool 当前网页的内容是否有效
-    title = ""
-    content = ""
-    for item in bs.findAll():  # 找到所有标签的内容
-        if item.name == "script" or item.name == "style":  # 跳过script标签和style标签
-            continue
-        # print(item.attrs)
-        content += item.get_text()  # 获得content网页内容
-    content = re.sub("\n\n", "", content)  # 去除多余的换行
-    content = content.replace('\n', '')
-    content = content.replace('\t', '')
-    if bs.title is not None:  # 获得title
-        title = bs.title.get_text()
-    if title == "" or title is None or title.find("301") != -1 or title.find("302") != -1 or \
-            title.find("404") != -1 or title.find("出错") != -1:  # title无效
-        return False
-    else:  # title有效
+    """提取并保存网页正文内容"""
+    try:
+        # 使用readability提取正文
+        doc = Document(str(bs))
+        summary = doc.summary()
+        content_bs = BeautifulSoup(summary, "html.parser")
+        content = content_bs.get_text(separator="\n", strip=True)
+        content = clean_content(content)
+        
+        # 提取标题
+        title = doc.title() or bs.title.get_text() if bs.title else ""
+        title = clean_content(title)
+
+        # 验证标题有效性
+        invalid_keywords = ["301", "302", "404", "出错", "Error"]
+        if not title or any(keyword in title for keyword in invalid_keywords):
+            return False
+
+        # 保存结果
         json_data = {"url": url, "title": title, "content": content}
         print_json_data(json_data)
-        with open(os.path.join(dirname, index.__str__() + ".json"), 'w', encoding="utf-8") as file:  # 保存url、title和content
-            json.dump(json_data, file, ensure_ascii=False)
-        file.close()
+        with open(os.path.join(dirname, f"{index}.json"), "w", encoding="utf-8") as f:
+            json.dump(json_data, f, ensure_ascii=False)
         return True
+
+    except Exception as e:
+        print(f"Error processing {url}: {str(e)}")
+        return False
+
 
 
 # 迭代爬虫
@@ -195,8 +189,8 @@ download_suffix_list = ["3gp", "7z", "aac", "ace", "aif", "arj", "asf", "avi", "
                         "wp5", "wpd", "wps", "xls", "xlsx", "xps", "xz", "z", "zip", "zipx", "zpaq", "zstd", "jpg", "png"]
 
 # 参数
-dirname = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")  # 目录名称（设置为当前时间）
-os.mkdir(dirname)  # 创建该目录
+dirname = datetime.now().strftime("%Y_%m_%d_%H_%M_%S_optimized")
+os.makedirs(dirname, exist_ok=True)
 crawl_timeout = 1  # 网页爬虫连接超时时间
 crawl_iteration_times = 3  # 爬虫迭代的次数
 html_index = 0  # 网页的index
