@@ -6,13 +6,9 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 from elasticsearch import Elasticsearch
-from pygraph.classes.digraph import digraph
+
 from readability import Document 
-try:
-    from pr_iterator import PRIterator
-except ImportError:
-    print("Error: 'pr_iterator' module not found. Ensure it is installed or available in the project directory.")
-    PRIterator = None  # Placeholder to avoid further errors
+
 def clean_content(text):
     """移除HTML注释、多余空格和不可见字符"""
     text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)  # 删除HTML注释
@@ -205,9 +201,7 @@ es = Elasticsearch(hosts=['http://localhost:9200'],http_auth=('elastic', 'yqA2Pf
 with open("default_urls.json") as file:  # 初始化爬虫目标网址
     urls_target = json.load(file)  # urls_target = ["https://www.nankai.edu.cn"]  # 爬虫目标网址
 # urls_target = ["http://xxgk.nankai.edu.cn"]  # test
-# 初始化page_rank相关变量
-page_rank_digraph = digraph()  # pagerank用到的图
-page_rank_iterator = PRIterator(page_rank_digraph)  # dg实例化的链接分析类
+
 # 进行第0次迭代（初始化迭代）
 for url_target in urls_target:  # 对于所有目标网址
     html = get_html(url_target)
@@ -217,21 +211,9 @@ for url_target in urls_target:  # 对于所有目标网址
         continue
     html_index += 1
     urls_taken.append(url_target)  # 添加到已访问列表
-    page_rank_digraph.add_node(url_target)  # 初始化节点
+  
 
 # 执行爬虫
 crawl_loop(crawl_iteration_times, url_count, html_index, urls_target, urls_taken)
 
-# 计算链接分析结果（迭代法）
-# print(urls_taken)
-# print(page_rank_digraph.nodes())
-# print(page_rank_digraph.edges())
-page_rank_results = page_rank_iterator.page_rank()
-print("The final page rank is\n", page_rank_results)
-print(type(page_rank_results))
-with open(os.path.join(dirname + "_pr_nodes.json"), 'w', encoding="utf-8") as file:  # 保存pr图的节点
-    json.dump(page_rank_digraph.nodes(), file, ensure_ascii=False)
-    file.close()
-with open(os.path.join(dirname + "_pr_results.json"), 'w', encoding="utf-8") as file:  # 保存pr结果
-    json.dump(page_rank_results, file, ensure_ascii=False)
-    file.close()
+
