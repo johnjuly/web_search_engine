@@ -149,14 +149,7 @@ def crawl_loop(i, url_count, html_index, urls_target, urls_taken):  # i: 迭代�
                 html_index += 1
                 urls_expand.append(url_expand)  # 添加到拓展列表
                 urls_taken.append(url_expand)  # 添加到已访问列表
-                page_rank_digraph.add_node(url_expand)  # 添加page_rank图节点
-                page_rank_digraph.add_edge((url, url_expand))  # 新添加的节点肯定不存在相关边，直接添加
-            else:  # 链接已访问
-                if not page_rank_digraph.has_edge((url, url_expand)):  # 若不存在边，则添加
-                    page_rank_digraph.add_edge((url, url_expand))
-                else:  # 若存在边，则设置边的权重+1
-                    page_rank_digraph.set_edge_weight((url, url_expand),
-                                                      page_rank_digraph.edge_weight((url, url_expand)) + 1)
+                
 
     return crawl_loop(i - 1, url_count, html_index, urls_expand, urls_taken)
 
@@ -211,9 +204,6 @@ for url_target in urls_target:  # 对于所有目标网址
         continue
     html_index += 1
     urls_taken.append(url_target)  # 添加到已访问列表
-  
-
+   
 # 执行爬虫
 crawl_loop(crawl_iteration_times, url_count, html_index, urls_target, urls_taken)
-
-
