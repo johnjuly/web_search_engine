@@ -1,0 +1,132 @@
+<!-- ui/index.html -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>校园通知搜索</title>
+    <!-- 引入Bootstrap美化 -->
+    <link
+      href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      .highlight {
+        background-color: #ffeb3b;
+        padding: 0 0.2em;
+      }
+      .result-card {
+        transition: all 0.3s;
+      }
+      .result-card:hover {
+        transform: translateY(-5px);
+      }
+      #loading {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    {% raw %}
+    <div class="container py-5">
+      <h1 class="text-center mb-4">📚 校园通知搜索引擎</h1>
+
+      <!-- 搜索框 -->
+      <div class="input-group mb-4">
+        <input
+          type="text"
+          class="form-control form-control-lg"
+          placeholder="请输入关键词（如：奖学金、放假通知）"
+          v-model="query"
+          @input="handleSearch"
+        />
+        <button class="btn btn-primary" @click="handleSearch">🔍 搜索</button>
+      </div>
+
+      <!-- 加载提示 -->
+      <div id="loading" class="text-center mb-3">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">加载中...</span>
+        </div>
+        <span class="ms-2">正在努力搜索中...</span>
+      </div>
+
+      <!-- 结果展示 -->
+      <div v-if="results.length" class="row g-4">
+        <div
+          v-for="(item, index) in results"
+          :key="index"
+          class="col-12 result-card"
+        >
+          <div class="card h-100 shadow-sm">
+            <div class="card-body">
+              <h5 class="card-title" v-html="item.title"></h5>
+              <p class="card-text text-muted" v-html="item.content"></p>
+              <div class="d-flex justify-content-between align-items-center">
+                <a
+                  :href="item.url"
+                  class="btn btn-outline-primary btn-sm"
+                  target="_blank"
+                >
+                  查看原文
+                </a>
+                <small class="text-muted">
+                  {{ item.publish_date ? item.publish_date : '未知日期' }}
+                </small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 无结果提示 -->
+      <div v-else-if="query.length >= 2" class="alert alert-warning">
+        未找到相关结果，请尝试其他关键词
+      </div>
+    </div>
+    {% endraw %}
+    <!-- 引入Vue和axios -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/axios/1.5.0/axios.min.js"></script>
+
+    <script>
+      const { createApp } = Vue;
+
+      createApp({
+        data() {
+          return {
+            query: "",
+            results: [],
+            isLoading: false,
+          };
+        },
+        methods: {
+          async handleSearch() {
+            if (this.query.length < 2) return;
+
+            this.isLoading = true;
+            try {
+              const response = await axios.post(
+                "http://localhost:8000/search",
+                { query: this.query }
+              );
+
+              this.results = response.data.items;
+            } catch (error) {
+              console.error("搜索失败:", error);
+              alert("搜索服务暂时不可用，请稍后重试");
+            } finally {
+              this.isLoading = false;
+            }
+          },
+        },
+        watch: {
+          isLoading(newVal) {
+            document.getElementById("loading").style.display = newVal
+              ? "block"
+              : "none";
+          },
+        },
+      }).mount(".container");
+    </script>
+  </body>
+</html>
