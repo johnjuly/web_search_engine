@@ -1,0 +1,36 @@
+# 忽略 Python 虚拟环境
+venv/
+
+# 忽略编译文件
+*.pyc
+*.pyo
+__pycache__/
+
+# 忽略日志文件
+*.log
+
+# 忽略环境变量文件
+.env
+
+# 忽略数据库快照或临时文件
+*.sqlite3
+*.db
+
+# 忽略爬虫生成的临时文件或缓存
+爬虫/*.tmp
+爬虫/*.cache
+
+# 忽略 Elasticsearch 索引日志
+index/*.log
+
+# 忽略搜索服务的静态文件缓存
+search_service/ui/static/
+
+# 忽略操作系统生成的文件
+.DS_Store
+Thumbs.db
+
+# 忽略其他临时文件
+*.bak
+*.swp
+*.tmp
