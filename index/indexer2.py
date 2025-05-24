@@ -15,7 +15,7 @@ collection = db["webpages"]
 # 连接Elasticsearch
 es = Elasticsearch(
     ["http://localhost:9200"],
-    basic_auth=("elastic", "oobX44qF")  # 替换为你的密码
+    basic_auth=("elastic", "oobX44qF") 
 )
 documents_collection = db["documents"]
 

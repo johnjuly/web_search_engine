@@ -13,7 +13,7 @@ es = Elasticsearch(
     basic_auth=("elastic", "oobX44qF")  # 替换为你的密码
 )
 
-# 定义索引Mapping（可选，Elasticsearch会自动推断类型）
+# 定义索引Mapping
 index_name = "webpages_index"
 mapping = {
   "mappings": {
@@ -21,7 +21,8 @@ mapping = {
       "title": {"type": "text", "analyzer": "ik_max_word"},
       "main_content": {"type": "text", "analyzer": "ik_max_word"},
       "url": {"type": "keyword"},
-      "crawled_at": {"type": "date"}
+      "crawled_at": {"type": "date"},
+      "content_hash": {"type": "keyword"}
     }
   }
 }
@@ -38,7 +39,8 @@ def generate_data():
                 "title": doc.get("title"),
                 "main_content": doc.get("main_content"),
                 "url": doc.get("url"),
-                "crawled_at": doc.get("crawled_at")
+                "crawled_at": doc.get("crawled_at"),
+                "content_hash": {"type": "keyword"}
             }
         }
 

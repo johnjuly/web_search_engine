@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>校园通知搜索引擎</title>
+    <link
+      href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      .highlight {
+        /* Class used by Elasticsearch highlight pre_tags */
+        background-color: #ffeb3b;
+        padding: 0 0.2em;
+        font-weight: bold;
+      }
+      .result-card {
+        transition: all 0.3s;
+        margin-bottom: 1rem;
+      }
+      .result-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+      }
+      #loading-indicator {
+        display: none; /* Hidden by default, controlled by Vue */
+      }
+      .search-container {
+        max-width: 800px;
+        margin: auto;
+      }
+      .pagination-controls {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin-top: 2rem;
+      }
+      .pagination-controls button {
+        margin: 0 0.5rem;
+      }
+      .footer-text {
+        text-align: center;
+        margin-top: 3rem;
+        color: #6c757d;
+      }
+      .search-filters {
+        margin-bottom: 1.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    {% raw %}
+    <div id="app" class="container py-4 search-container">
+      <!-- 登录/注册浮动框，右上角显示 -->
+      <div
+        style="
+          position: absolute;
+          top: 30px;
+          right: 40px;
+          z-index: 1000;
+          min-width: 220px;
+        "
+      >
+        <!-- 未登录时 -->
+        <div v-if="!isLoggedIn" class="login-box bg-light p-3 rounded shadow">
+          <div class="mb-2">
+            <input
+              v-model="loginForm.username"
+              class="form-control"
+              placeholder="用户名"
+              autocomplete="username"
+            />
+          </div>
+          <div class="mb-2">
+            <input
+              v-model="loginForm.password"
+              type="password"
+              class="form-control"
+              placeholder="密码"
+              autocomplete="current-password"
+            />
+          </div>
+          <div class="d-grid gap-2">
+            <button @click="login" class="btn btn-primary btn-sm">登录</button>
+            <button @click="register" class="btn btn-outline-secondary btn-sm">
+              注册
+            </button>
+          </div>
+        </div>
+        <!-- 已登录时：下拉菜单 -->
+        <div v-else class="dropdown">
+          <button
+            class="btn btn-light dropdown-toggle w-100"
+            type="button"
+            id="userDropdown"
+            data-bs-toggle="dropdown"
+            aria-expanded="false"
+          >
+            👤 {{ currentUser }}
+          </button>
+          <ul class="dropdown-menu w-100" aria-labelledby="userDropdown">
+            <li>
+              <a
+                class="dropdown-item"
+                href="#"
+                @click.prevent="showProfileModal"
+                >个人信息</a
+              >
+            </li>
+            <li>
+              <a class="dropdown-item" href="#" @click.prevent="showEditModal"
+                >修改信息</a
+              >
+            </li>
+            <li>
+              <a
+                class="dropdown-item"
+                href="#"
+                @click.prevent="showHistoryModal"
+                >查询历史</a
+              >
+            </li>
+            <li><hr class="dropdown-divider" /></li>
+            <li>
+              <a
+                class="dropdown-item text-danger"
+                href="#"
+                @click.prevent="logout"
+                >退出登录</a
+              >
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <header class="text-center mb-4">
+        <h1>校园通知搜索引擎</h1>
+      </header>
+
+      <main>
+        <div class="input-group mb-3 shadow-sm">
+          <input
+            type="text"
+            class="form-control form-control-lg"
+            placeholder="输入关键词搜索..."
+            v-model.trim="query"
+            @keyup.enter="handleNewSearchInitiation"
+          />
+          <button
+            class="btn btn-primary px-4"
+            @click="handleNewSearchInitiation"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              fill="currentColor"
+              class="bi bi-search"
+              viewBox="0 0 16 16"
+            >
+              <path
+                d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"
+              />
+            </svg>
+            搜索
+          </button>
+        </div>
+
+        <div class="row search-filters">
+          <div class="col-md-4">
+            <label for="searchTypeSelect" class="form-label">搜索类型:</label>
+            <select
+              id="searchTypeSelect"
+              class="form-select"
+              v-model="searchType"
+            >
+              <option value="basic">基本搜索 (支持高亮)</option>
+              <option value="phrase">短语搜索</option>
+              <option value="wildcard">通配搜索 ( * ? )</option>
+            </select>
+          </div>
+          <div class="col-md-8 align-self-end text-md-end" v-if="total > 0">
+            <small class="text-muted">找到约 {{ total }} 条结果</small>
+          </div>
+        </div>
+
+        <div id="loading-indicator" class="text-center my-4" v-show="isLoading">
+          <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">加载中...</span>
+          </div>
+          <p class="mt-2">正在努力搜索中...</p>
+        </div>
+
+        <div v-if="!isLoading && results.length > 0" class="results-list">
+          <div
+            v-for="(item, index) in results"
+            :key="item.id || index"
+            class="card result-card"
+          >
+            <div class="card-body">
+              <h5 class="card-title">
+                <a
+                  :href="item.url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  v-if="searchType === 'basic' && item.title_highlighted"
+                  v-html="item.title_highlighted"
+                ></a>
+                <a
+                  :href="item.url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  v-else
+                  >{{ item.title }}</a
+                >
+              </h5>
+              <p
+                class="card-text"
+                v-if="searchType === 'basic' && item.content_highlighted"
+                v-html="item.content_highlighted"
+              ></p>
+              <p class="card-text" v-else>{{ item.content }}</p>
+              <div
+                class="d-flex justify-content-between align-items-center mt-3"
+              >
+                <a
+                  :href="'/api/snapshot/view/' + item.content_hash"
+                  class="btn btn-outline-secondary btn-sm"
+                  target="_blank"
+                  title="查看快照（如果存在）"
+                >
+                  查看快照
+                </a>
+                <small class="text-muted">
+                  发布日期: {{ item.publish_date ? new
+                  Date(item.publish_date).toLocaleDateString() : '未知' }}
+                </small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-if="!isLoading && results.length === 0 && searchAttempted"
+          class="alert alert-warning text-center"
+        >
+          🙁 未找到与 "<strong>{{ lastQuery }}</strong
+          >"相关的结果，请尝试其他关键词或搜索类型。
+        </div>
+        <div
+          v-if="!isLoading && !searchAttempted && results.length === 0"
+          class="alert alert-info text-center"
+        >
+          请输入关键词开始搜索。
+        </div>
+
+        <nav
+          aria-label="Page navigation"
+          v-if="!isLoading && total > size && results.length > 0"
+          class="mt-4"
+        >
+          <ul class="pagination justify-content-center">
+            <li class="page-item" :class="{ disabled: page === 1 }">
+              <a
+                class="page-link"
+                href="#"
+                @click.prevent="changePage(page - 1)"
+                >&laquo; 上一页</a
+              >
+            </li>
+            <li class="page-item disabled">
+              <span class="page-link"
+                >第 {{ page }} 页 / 共 {{ totalPages }} 页</span
+              >
+            </li>
+            <li class="page-item" :class="{ disabled: page >= totalPages }">
+              <a
+                class="page-link"
+                href="#"
+                @click.prevent="changePage(page + 1)"
+                >下一页 &raquo;</a
+              >
+            </li>
+          </ul>
+        </nav>
+      </main>
+      <footer class="footer-text">
+        <p>&copy; {{ new Date().getFullYear() }} 校园通知搜索引擎</p>
+      </footer>
+      <!-- 个人信息模态框 -->
+      <div
+        class="modal fade"
+        id="profileModal"
+        tabindex="-1"
+        aria-hidden="true"
+      >
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">个人信息</h5>
+              <button
+                type="button"
+                class="btn-close"
+                data-bs-dismiss="modal"
+              ></button>
+            </div>
+            <div class="modal-body">
+              <div v-if="profile">
+                <p><strong>用户名：</strong>{{ profile.username }}</p>
+                <p><strong>角色：</strong>{{ profile.role }}</p>
+                <p><strong>学院：</strong>{{ profile.college }}</p>
+                <p><strong>年龄：</strong>{{ profile.age }}</p>
+                <p>
+                  <strong>兴趣：</strong>{{ profile.interests?.join(', ') }}
+                </p>
+              </div>
+              <div v-else>加载中...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div
+        class="modal fade"
+        id="historyModal"
+        tabindex="-1"
+        aria-hidden="true"
+      >
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">查询历史</h5>
+              <button
+                type="button"
+                class="btn-close"
+                data-bs-dismiss="modal"
+              ></button>
+            </div>
+            <div class="modal-body">
+              <ul v-if="historyList.length > 0" class="list-group">
+                <li v-for="item in historyList" class="list-group-item">
+                  <span class="text-muted"
+                    >{{ new Date(item.timestamp).toLocaleString() }}</span
+                  >
+                  <span class="ms-2 badge bg-secondary"
+                    >{{ item.search_type }}</span
+                  >
+                  <span class="ms-2">{{ item.query }}</span>
+                </li>
+              </ul>
+              <div v-else>暂无历史记录</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- 修改信息模态框 -->
+      <div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+          <form class="modal-content" @submit.prevent="updateProfile">
+            <div class="modal-header">
+              <h5 class="modal-title">修改信息</h5>
+              <button
+                type="button"
+                class="btn-close"
+                data-bs-dismiss="modal"
+              ></button>
+            </div>
+            <div class="modal-body" v-if="profile">
+              <div class="mb-2">
+                <label class="form-label">角色</label>
+                <input v-model="profile.role" class="form-control" />
+              </div>
+              <div class="mb-2">
+                <label class="form-label">学院</label>
+                <input v-model="profile.college" class="form-control" />
+              </div>
+              <div class="mb-2">
+                <label class="form-label">年龄</label>
+                <input
+                  v-model.number="profile.age"
+                  type="number"
+                  class="form-control"
+                />
+              </div>
+              <div class="mb-2">
+                <label class="form-label">兴趣（逗号分隔）</label>
+                <input v-model="interestsInput" class="form-control" />
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endraw %}
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/axios/1.5.0/axios.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script>
+      const { createApp } = Vue;
+
+      createApp({
+        data() {
+          return {
+            isLoggedIn: false,
+            currentUser: "",
+            loginForm: { username: "", password: "" },
+            query: "",
+            lastQuery: "", // To display in "no results" message
+            results: [],
+            isLoading: false,
+            searchAttempted: false,
+            page: 1,
+            size: 10,
+            total: 0,
+            searchType: "basic", // Default search type
+            profile: null,
+            interestsInput: "",
+            historyList: [],
+          };
+        },
+        created() {
+          this.checkLogin();
+        },
+        computed: {
+          totalPages() {
+            return Math.ceil(this.total / this.size);
+          },
+        },
+        methods: {
+          async executeSearch() {
+            if (!this.query && this.searchType !== "wildcard") {
+              // Allow empty query for wildcard if backend supports it
+              this.results = [];
+              this.total = 0;
+              this.searchAttempted = true; // Mark that a search was "attempted"
+              this.lastQuery = this.query;
+              return;
+            }
+            if (
+              this.query.length < 1 &&
+              (this.searchType === "basic" || this.searchType === "phrase")
+            ) {
+              // Potentially too short for basic/phrase, you might want a minimum length
+              // For now, let's allow it and let the backend decide or return 0 results.
+            }
+
+            this.isLoading = true;
+            this.searchAttempted = true;
+            this.lastQuery = this.query;
+            let apiUrl = `/api/${this.searchType}/search`;
+            let payload = {
+              page: this.page,
+              size: this.size,
+            };
+
+            if (this.searchType === "basic") {
+              payload.query = this.query;
+              // Sort can be added here if needed: payload.sort = "..."
+            } else if (this.searchType === "phrase") {
+              payload.phrase = this.query;
+              payload.fields = ["title", "main_content"]; // As per phrase_search.py
+            } else if (this.searchType === "wildcard") {
+              payload.query = this.query;
+              payload.field = "main_content"; // Default field from wildcard_search.py
+              // Add other flags like use_regex if you add UI controls for them
+            }
+
+            try {
+              const response = await axios.post(apiUrl, payload);
+              const data = response.data;
+              if (data.items) {
+                this.results = data.items.map((item) => {
+                  // Process for highlighting if basic search
+                  if (this.searchType === "basic") {
+                    return {
+                      ...item,
+                      title_highlighted: item.title, // Assuming backend for basic search returns highlighted title in 'title'
+                      content_highlighted: item.content, // Assuming backend returns highlighted content in 'content'
+                    };
+                  }
+                  return item; // For phrase/wildcard, no pre-processing for highlight needed here
+                });
+                this.total = data.total;
+              } else {
+                this.results = [];
+                this.total = 0;
+              }
+            } catch (error) {
+              console.error(
+                "Search API error:",
+                error.response || error.message || error
+              );
+              alert(
+                `搜索失败: ${
+                  error.response?.data?.error || error.message || "未知错误"
+                }`
+              );
+              this.results = [];
+              this.total = 0;
+            } finally {
+              this.isLoading = false;
+            }
+          },
+          async showProfileModal() {
+            await this.getProfile();
+            const modal = new bootstrap.Modal(
+              document.getElementById("profileModal")
+            );
+            modal.show();
+          },
+          async showEditModal() {
+            await this.getProfile();
+            this.interestsInput = this.profile.interests
+              ? this.profile.interests.join(",")
+              : "";
+            const modal = new bootstrap.Modal(
+              document.getElementById("editModal")
+            );
+            modal.show();
+          },
+          async getProfile() {
+            const res = await axios.get("/api/profile");
+            this.profile = res.data;
+          },
+          async updateProfile() {
+            this.profile.interests = this.interestsInput
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean);
+            await axios.post("/api/profile", this.profile);
+            alert("信息已更新");
+            bootstrap.Modal.getInstance(
+              document.getElementById("editModal")
+            ).hide();
+          },
+          async showHistoryModal() {
+            const res = await axios.get("/api/history");
+            this.historyList = res.data;
+            const modal = new bootstrap.Modal(
+              document.getElementById("historyModal")
+            );
+            modal.show();
+          },
+          async checkLogin() {
+            try {
+              const res = await axios.get("/api/auth/whoami");
+              if (res.data.username) {
+                this.isLoggedIn = true;
+                this.currentUser = res.data.username;
+              } else {
+                this.isLoggedIn = false;
+                this.currentUser = "";
+              }
+            } catch (e) {
+              this.isLoggedIn = false;
+              this.currentUser = "";
+            }
+          },
+          async login() {
+            if (!this.loginForm.username || !this.loginForm.password) {
+              alert("请输入用户名和密码");
+              return;
+            }
+            try {
+              const res = await axios.post("/api/auth/login", this.loginForm);
+              if (res.data.msg) {
+                this.isLoggedIn = true;
+                this.currentUser = this.loginForm.username;
+                this.loginForm.password = "";
+              } else {
+                alert(res.data.error);
+              }
+            } catch (e) {
+              alert(e.response?.data?.error || "登录失败");
+            }
+          },
+          async register() {
+            if (!this.loginForm.username || !this.loginForm.password) {
+              alert("请输入用户名和密码");
+              return;
+            }
+            try {
+              const res = await axios.post(
+                "/api/auth/register",
+                this.loginForm
+              );
+              alert(res.data.msg || res.data.error);
+            } catch (e) {
+              alert(e.response?.data?.error || "注册失败");
+            }
+          },
+
+          async logout() {
+            await axios.post("/api/auth/logout");
+            this.isLoggedIn = false;
+            this.currentUser = "";
+          },
+          handleNewSearchInitiation() {
+            this.page = 1;
+            this.executeSearch();
+          },
+
+          changePage(newPage) {
+            if (newPage >= 1 && newPage <= this.totalPages) {
+              this.page = newPage;
+              this.executeSearch();
+            }
+          },
+        },
+        watch: {
+          searchType() {
+            // When search type changes, perform a new search if query exists
+            if (this.query) {
+              this.handleNewSearchInitiation();
+            } else {
+              this.results = [];
+              this.total = 0;
+              this.searchAttempted = false; // Reset as query is empty
+            }
+          },
+        },
+        mounted() {
+          // You could potentially load initial results or handle URL query params here
+        },
+      }).mount("#app");
+    </script>
+  </body>
+</html>
