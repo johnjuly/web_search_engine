@@ -177,10 +177,31 @@
               <option value="basic">基本搜索 (支持高亮)</option>
               <option value="phrase">短语搜索</option>
               <option value="wildcard">通配搜索 ( * ? )</option>
+              <option value="document">文档搜索</option>
             </select>
           </div>
           <div class="col-md-8 align-self-end text-md-end" v-if="total > 0">
             <small class="text-muted">找到约 {{ total }} 条结果</small>
+          </div>
+        </div>
+
+        <div v-if="searchType === 'wildcard'" class="mb-3">
+          <label class="form-label">通配搜索模式：</label>
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" id="wildcardMode" value="wildcard" v-model="wildcardMode">
+            <label class="form-check-label" for="wildcardMode">通配符</label>
+          </div>
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" id="prefixMode" value="prefix" v-model="wildcardMode">
+            <label class="form-check-label" for="prefixMode">前缀</label>
+          </div>
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" id="suffixMode" value="suffix" v-model="wildcardMode">
+            <label class="form-check-label" for="suffixMode">后缀</label>
+          </div>
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" id="fuzzyMode" value="fuzzy" v-model="wildcardMode">
+            <label class="form-check-label" for="fuzzyMode">模糊</label>
           </div>
         </div>
 
@@ -236,6 +257,24 @@
                   Date(item.publish_date).toLocaleDateString() : '未知' }}
                 </small>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="searchType === 'document' && results.length > 0" class="results-list">
+          <div v-for="(item, index) in results" :key="item.id || index" class="card result-card">
+            <div class="card-body">
+              <h5 class="card-title">
+                <span>{{ item.filename }}</span>
+                <span class="badge bg-info ms-2">{{ item.file_type }}</span>
+              </h5>
+              <p class="card-text">
+                来源页面: <a :href="item.source_page" target="_blank">{{ item.source_page }}</a>
+              </p>
+              <p class="card-text">
+                抓取时间: {{ item.crawled_at }}
+              </p>
+              <a :href="item.url" class="btn btn-success btn-sm" target="_blank" download>下载文档</a>
             </div>
           </div>
         </div>
@@ -419,6 +458,7 @@
             profile: null,
             interestsInput: "",
             historyList: [],
+            wildcardMode: "wildcard", // 默认通配符
           };
         },
         created() {
@@ -464,8 +504,14 @@
               payload.fields = ["title", "main_content"]; // As per phrase_search.py
             } else if (this.searchType === "wildcard") {
               payload.query = this.query;
-              payload.field = "main_content"; // Default field from wildcard_search.py
-              // Add other flags like use_regex if you add UI controls for them
+              payload.field = "main_content";
+              payload.use_regex = this.wildcardMode === "regex";
+              payload.prefix = this.wildcardMode === "prefix";
+              payload.suffix = this.wildcardMode === "suffix";
+              payload.fuzzy = this.wildcardMode === "fuzzy";
+            } else if (this.searchType === "document") {
+              payload.query = this.query;
+              apiUrl = "/api/document/search";
             }
 
             try {

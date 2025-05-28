@@ -12,7 +12,7 @@ from .models.user import User
 from.routers.snapshot import snapshot_bp  # 导入快照蓝图
 from .routers.profile import profile_bp
 from .routers.history import history_bp
-
+from .routers.document_search import document_search_bp
 
 
 app = Flask(__name__)
@@ -32,6 +32,7 @@ app.register_blueprint(basic_search_bp, url_prefix="/api/basic")  # 添加前缀
 app.register_blueprint(phrase_search_bp, url_prefix="/api/phrase")
 app.register_blueprint(wildcard_search_bp, url_prefix="/api/wildcard")  # 添加前缀 /api
 app.register_blueprint(snapshot_bp, url_prefix="/api/snapshot")  # 添加前缀 /api
+app.register_blueprint(document_search_bp, url_prefix="/api/document")  # 添加前缀 /api
 # 配置模板目录
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app.template_folder = os.path.join(BASE_DIR, "ui")

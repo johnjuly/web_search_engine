@@ -69,7 +69,7 @@ def generate_actions():
             # 构建ES文档
             action = {
                 "_index": ES_INDEX,
-                "_id": f"{content_hash}_{int(snapshot_date.timestamp())}",  # 直接使用datetime对象
+                "_id":  content_hash,  # 直接使用datetime对象
                 "_source": {
                     "url": url,
                     "snapshot_date": snapshot_date.isoformat(),  # 转换为ISO字符串
