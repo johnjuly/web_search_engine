@@ -14,6 +14,7 @@ from .routers.profile import profile_bp
 from .routers.history import history_bp
 from .routers.document_search import document_search_bp
 
+from search_service.app.routers import suggest
 
 app = Flask(__name__)
 app.secret_key =  "16a04150057b37e56c5a3d2e6f43ab39c465448801592b6740484aeeeffb36c4"
@@ -33,6 +34,8 @@ app.register_blueprint(phrase_search_bp, url_prefix="/api/phrase")
 app.register_blueprint(wildcard_search_bp, url_prefix="/api/wildcard")  # 添加前缀 /api
 app.register_blueprint(snapshot_bp, url_prefix="/api/snapshot")  # 添加前缀 /api
 app.register_blueprint(document_search_bp, url_prefix="/api/document")  # 添加前缀 /api
+app.register_blueprint(suggest.suggest_bp, url_prefix="/api")
+
 # 配置模板目录
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app.template_folder = os.path.join(BASE_DIR, "ui")

@@ -46,6 +46,22 @@
       .search-filters {
         margin-bottom: 1.5rem;
       }
+      .suggestions-dropdown {
+        border: 1px solid rgba(0, 0, 0, 0.125);
+        top: 100%; /* 在输入框下方显示 */
+        left: 0;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+      }
+
+      .suggestions-dropdown .list-group-item {
+        cursor: pointer;
+        border-left: none;
+        border-right: none;
+      }
+
+      .suggestions-dropdown .list-group-item:hover {
+        background-color: #f8f9fa;
+      }
     </style>
   </head>
   <body>
@@ -134,36 +150,69 @@
       </div>
 
       <header class="text-center mb-4">
-        <h1>校园通知搜索引擎</h1>
+        <h1>校园通知</h1>
       </header>
 
       <main>
-        <div class="input-group mb-3 shadow-sm">
-          <input
-            type="text"
-            class="form-control form-control-lg"
-            placeholder="输入关键词搜索..."
-            v-model.trim="query"
-            @keyup.enter="handleNewSearchInitiation"
-          />
-          <button
-            class="btn btn-primary px-4"
-            @click="handleNewSearchInitiation"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              fill="currentColor"
-              class="bi bi-search"
-              viewBox="0 0 16 16"
+        <div class="position-relative">
+          <!-- 相对定位容器 -->
+          <div class="input-group mb-3 shadow-sm">
+            <input
+              type="text"
+              class="form-control form-control-lg"
+              placeholder="输入关键词搜索..."
+              v-model.trim="query"
+              @keyup.enter="handleNewSearchInitiation"
+              @input="fetchSuggestions"
+            />
+            <button
+              class="btn btn-primary px-4"
+              @click="handleNewSearchInitiation"
             >
-              <path
-                d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"
-              />
-            </svg>
-            搜索
-          </button>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                fill="currentColor"
+                class="bi bi-search"
+                viewBox="0 0 16 16"
+              >
+                <path
+                  d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"
+                />
+              </svg>
+              搜索
+            </button>
+          </div>
+
+          <!-- 联想建议下拉框 -->
+          <div
+            v-show="showSuggestions && suggestions.length > 0"
+            class="suggestions-dropdown position-absolute bg-white rounded shadow"
+            style="
+              width: 100%;
+              z-index: 1000;
+              max-height: 300px;
+              overflow-y: auto;
+            "
+          >
+            <ul class="list-group list-group-flush">
+              <li
+                v-for="(suggestion, index) in suggestions"
+                :key="index"
+                class="list-group-item list-group-item-action"
+                @mousedown="selectSuggestion(suggestion)"
+              >
+                <div class="d-flex justify-content-between">
+                  <span>{{ suggestion.title }}</span>
+                  <small class="text-muted">{{ suggestion.text }}</small>
+                </div>
+                <div class="text-truncate small text-muted">
+                  {{ suggestion.url }}
+                </div>
+              </li>
+            </ul>
+          </div>
         </div>
 
         <div class="row search-filters">
@@ -188,19 +237,43 @@
         <div v-if="searchType === 'wildcard'" class="mb-3">
           <label class="form-label">通配搜索模式：</label>
           <div class="form-check form-check-inline">
-            <input class="form-check-input" type="radio" id="wildcardMode" value="wildcard" v-model="wildcardMode">
+            <input
+              class="form-check-input"
+              type="radio"
+              id="wildcardMode"
+              value="wildcard"
+              v-model="wildcardMode"
+            />
             <label class="form-check-label" for="wildcardMode">通配符</label>
           </div>
           <div class="form-check form-check-inline">
-            <input class="form-check-input" type="radio" id="prefixMode" value="prefix" v-model="wildcardMode">
+            <input
+              class="form-check-input"
+              type="radio"
+              id="prefixMode"
+              value="prefix"
+              v-model="wildcardMode"
+            />
             <label class="form-check-label" for="prefixMode">前缀</label>
           </div>
           <div class="form-check form-check-inline">
-            <input class="form-check-input" type="radio" id="suffixMode" value="suffix" v-model="wildcardMode">
+            <input
+              class="form-check-input"
+              type="radio"
+              id="suffixMode"
+              value="suffix"
+              v-model="wildcardMode"
+            />
             <label class="form-check-label" for="suffixMode">后缀</label>
           </div>
           <div class="form-check form-check-inline">
-            <input class="form-check-input" type="radio" id="fuzzyMode" value="fuzzy" v-model="wildcardMode">
+            <input
+              class="form-check-input"
+              type="radio"
+              id="fuzzyMode"
+              value="fuzzy"
+              v-model="wildcardMode"
+            />
             <label class="form-check-label" for="fuzzyMode">模糊</label>
           </div>
         </div>
@@ -261,20 +334,34 @@
           </div>
         </div>
 
-        <div v-if="searchType === 'document' && results.length > 0" class="results-list">
-          <div v-for="(item, index) in results" :key="item.id || index" class="card result-card">
+        <div
+          v-if="searchType === 'document' && results.length > 0"
+          class="results-list"
+        >
+          <div
+            v-for="(item, index) in results"
+            :key="item.id || index"
+            class="card result-card"
+          >
             <div class="card-body">
               <h5 class="card-title">
                 <span>{{ item.filename }}</span>
                 <span class="badge bg-info ms-2">{{ item.file_type }}</span>
               </h5>
               <p class="card-text">
-                来源页面: <a :href="item.source_page" target="_blank">{{ item.source_page }}</a>
+                来源页面:
+                <a :href="item.source_page" target="_blank"
+                  >{{ item.source_page }}</a
+                >
               </p>
-              <p class="card-text">
-                抓取时间: {{ item.crawled_at }}
-              </p>
-              <a :href="item.url" class="btn btn-success btn-sm" target="_blank" download>下载文档</a>
+              <p class="card-text">抓取时间: {{ item.crawled_at }}</p>
+              <a
+                :href="item.url"
+                class="btn btn-success btn-sm"
+                target="_blank"
+                download
+                >下载文档</a
+              >
             </div>
           </div>
         </div>
@@ -459,6 +546,8 @@
             interestsInput: "",
             historyList: [],
             wildcardMode: "wildcard", // 默认通配符
+            suggestions: [], // 存储联想建议
+            showSuggestions: false, // 控制建议框显示
           };
         },
         created() {
@@ -590,6 +679,46 @@
             );
             modal.show();
           },
+          // 获取联想建议
+          async fetchSuggestions() {
+            if (!this.query) {
+              this.suggestions = [];
+              this.showSuggestions = false;
+              return;
+            }
+
+            try {
+              const response = await axios.get("/api/suggest", {
+                params: {
+                  q: this.query,
+                  field: "title",
+                  size: 5,
+                },
+              });
+
+              this.suggestions = response.data.suggestions || [];
+              if (this.suggestions.length > 0) {
+                this.showSuggestions = true;
+              }
+            } catch (error) {
+              console.error("获取联想建议失败:", error);
+              this.suggestions = [];
+            }
+          },
+
+          // 选择建议项
+          selectSuggestion(suggestion) {
+            this.query = suggestion.text;
+            this.showSuggestions = false;
+            this.handleNewSearchInitiation();
+          },
+
+          // 隐藏建议框（延迟处理以避免点击前消失）
+          hideSuggestions() {
+            setTimeout(() => {
+              this.showSuggestions = false;
+            }, 200);
+          },
           async checkLogin() {
             try {
               const res = await axios.get("/api/auth/whoami");
@@ -653,6 +782,26 @@
             if (newPage >= 1 && newPage <= this.totalPages) {
               this.page = newPage;
               this.executeSearch();
+            }
+          },
+          async handleInput() {
+            if (this.query.length < 2) {
+              this.suggestions = [];
+              this.showSuggestions = false;
+              return;
+            }
+            
+            try {
+              const response = await fetch(`/api/suggest?q=${encodeURIComponent(this.query)}`);
+              if (response.ok) {
+                const data = await response.json();
+                this.suggestions = data.suggestions;
+                this.showSuggestions = true;
+              }
+            } catch (error) {
+              console.error('获取搜索建议失败:', error);
+              this.suggestions = [];
+              this.showSuggestions = false;
             }
           },
         },
