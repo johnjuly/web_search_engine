@@ -3,18 +3,21 @@
 ## 项目概述
 
 本项目实现了一个基于 Elasticsearch 的新闻搜索系统，具有以下主要功能：
+
 - 网页爬虫：自动抓取和更新新闻内容
 - 文本索引：使用 Elasticsearch 建立高效的全文索引
 - 高级搜索：支持多种查询方式和个性化推荐
 - 用户系统：支持用户注册、登录和个性化搜索
 
 ### 技术栈
+
 - 后端：Python + Flask
-- 搜索引擎：Elasticsearch + IK 分词器
+- 搜索引擎：Elasticsearch + IK 分词器 s
 - 数据库：MongoDB
 - 前端：HTML + CSS + JavaScript
 
 ### 项目结构
+
 ```
 news_search/
 ├── search_service/          # 搜索服务
@@ -34,6 +37,7 @@ news_search/
 ## 1. 网页抓取
 
 ### 1.1 爬虫架构
+
 - 基于 Python 多线程实现的分布式爬虫
 - 使用 MongoDB 存储爬取队列和结果
 - 使用布隆过滤器进行 URL 去重
@@ -41,6 +45,7 @@ news_search/
 - 支持增量更新和断点续传
 
 ### 1.2 核心功能
+
 - 多线程并发爬取
 - 自动重试机制
 - 网页内容智能提取
@@ -48,11 +53,13 @@ news_search/
 - 网页快照保存
 
 ### 1.3 数据存储
+
 - 原始网页内容存储在 MongoDB 中
 - 网页快照保存在文件系统中
 - 文档附件单独存储并建立索引
 
 ### 1.4 爬虫配置
+
 ```python
 # 全局配置
 MAX_CONCURRENT_TASKS = 10  # 最大并发任务数
@@ -131,16 +138,19 @@ mapping = {
 ```
 
 ### 2.4 索引优化
+
 - 使用 IK 分词器进行中文分词
 - 实现了同义词扩展
 - 配置了停用词过滤
 - 优化了字段权重设置
 
 ### 2.5 索引维护
+
 - 实现了增量更新机制
 - 支持索引备份和恢复
 
 ### 2.6 Elasticsearch 配置
+
 ```yaml
 services:
   elasticsearch:
@@ -166,7 +176,11 @@ services:
         soft: -1
         hard: -1
     healthcheck:
-      test: ["CMD-SHELL", "curl --output /dev/null --silent --head --fail -u elastic:${ES_LOCAL_PASSWORD} http://elasticsearch:${ES_LOCAL_PORT}"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl --output /dev/null --silent --head --fail -u elastic:${ES_LOCAL_PASSWORD} http://elasticsearch:${ES_LOCAL_PORT}",
+        ]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -191,17 +205,21 @@ volumes:
 ```
 
 主要配置说明：
+
 1. 安全配置
+
    - 启用 X-Pack 安全功能
    - 配置用户名密码认证
    - 禁用 SSL（开发环境）
 
 2. 性能配置
+
    - 单节点模式
    - 可配置的 JVM 堆内存
    - 磁盘空间水位线设置
 
 3. 监控配置
+
    - 健康检查
    - Kibana 集成
    - 日志监控
@@ -331,12 +349,14 @@ volumes:
 3. Flask 查询快照并渲染 snapshot.html，展示网页内容。
 
 ### 3.7 查询性能优化
+
 - 实现了查询缓存
 - 优化了分页查询
 - 添加了查询超时控制
 - 实现了查询结果去重
 
 ### 3.8 结果排序优化
+
 - 结合 TF-IDF 和 BM25 算法
 - 考虑文档时效性
 - 支持自定义排序规则
@@ -584,4 +604,3 @@ def suggest():
 ![alt text](image-22.png) 4. 前端调用示例
 在前端输入框输入时，调用 /api/suggest?q=xxx&field=title 获取联想结果，并展示在下拉列表中。
 ![alt text](image-23.png)
-
